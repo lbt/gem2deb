@@ -154,7 +154,20 @@ module Gem2Deb
     def initialize_binary_package
       self.binary_package = Package.new(source_package_name, metadata.has_native_extensions? ? 'any' : 'all')
       metadata.dependencies.each do |dependency|
-        binary_package.gem_dependencies << dependency
+        ver_range = if ENV["DH_RUBY_NO_VERCHECK"] || ! dependency.requirement
+                      ""
+                    else
+                      # strip upper range, Depends: can't handle it, maybe use Conflicts: ?
+                      " (#{dependency.requirement})".gsub(/,.*/, ")")
+                    end
+        # Convert the ~> ruby operator to a simple >=
+        debian_dep = "ruby-#{dependency.name.gsub('_', '-')}#{ver_range.gsub("~>", ">=")}"
+
+        if dependency.type == :development
+          binary_package.gemdev_dependencies << debian_dep
+        else
+          binary_package.gemrt_dependencies << debian_dep
+        end
       end
       binary_package
     end
@@ -269,8 +282,11 @@ module Gem2Deb
       def dependencies
         ['${shlibs:Depends}', '${misc:Depends}', 'ruby1.8 | ruby-interpreter' ]
       end
-      def gem_dependencies
-	@gem_dependencies ||= []
+      def gemdev_dependencies
+        @gemdev_dependencies ||= []
+      end
+      def gemrt_dependencies
+        @gemrt_dependencies ||= []
       end
     end
 
@@ -389,7 +405,7 @@ Priority: optional
 Maintainer: Debian Ruby Extras Maintainers <pkg-ruby-extras-maintainers@lists.alioth.debian.org>
 Uploaders: <%= maintainer['DEBFULLNAME'] %> <<%= maintainer['DEBEMAIL'] %>>
 DM-Upload-Allowed: yes
-Build-Depends: debhelper (>= 7.0.50~), gem2deb (>= <%= Gem2Deb::VERSION %>)
+Build-Depends: debhelper (>= 7.0.50~), gem2deb (>= <%= Gem2Deb::VERSION %>)<% if binary_package.gemdev_dependencies.length > 0 %>, <%= binary_package.gemdev_dependencies.join(', ') %><% end %><% if binary_package.gemrt_dependencies.length > 0 %>, <%= binary_package.gemrt_dependencies.join(', ') %><% end %>
 Standards-Version: 3.9.1
 #Vcs-Git: git://git.debian.org/pkg-ruby-extras/<%= source_package_name %>.git
 #Vcs-Browser: http://git.debian.org/?p=pkg-ruby-extras/<%= source_package_name %>.git;a=summary
@@ -399,10 +415,7 @@ XS-Ruby-Versions: <%= ruby_versions %>
 Package: <%= binary_package.name %>
 Architecture: <%= binary_package.architecture %>
 XB-Ruby-Versions: ${ruby:Versions}
-Depends: <%= binary_package.dependencies.join(', ') %>
-<% if binary_package.gem_dependencies.length > 0 %>
-# <%= binary_package.gem_dependencies.join(', ') %>
-<% end %>
+Depends: <%= binary_package.dependencies.join(', ') %><% if binary_package.gemrt_dependencies.length > 0 %>, <%= binary_package.gemrt_dependencies.join(', ') %><% end %>
 Description: <%= short_description ? short_description : 'FIXME' %>
 <% if long_description %>
 <%= long_description.lines.map { |line| ' ' + (line.strip.empty? ? '.' : line.strip) }.join("\n") + "\n" %>
@@ -422,6 +435,9 @@ Description: <%= short_description ? short_description : 'FIXME' %>
 #
 # If you need to specify the .gemspec (eg there is more than one)
 #export DH_RUBY_GEMSPEC=gem.gemspec
+#
+# Set DH_RUBY_NO_VERCHECK to ignore gem version dependencies
+#export DH_RUBY_NO_VERCHECK=yes
 
 %:
 	dh $@ --buildsystem=ruby --with ruby

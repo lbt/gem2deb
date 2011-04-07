@@ -55,6 +55,14 @@ module Gem2Deb
       gemspec ? gemspec.dependencies : []
     end
 
+    def development_dependencies
+      gemspec ? gemspec.development_dependencies : []
+    end
+
+    def runtime_dependencies
+      gemspec ? gemspec.runtime_dependencies : []
+    end
+
     def test_files
       gemspec ? gemspec.test_files : []
     end
