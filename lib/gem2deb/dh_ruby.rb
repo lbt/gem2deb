@@ -235,6 +235,7 @@ module Gem2Deb
       @skip_checks
     end
 
+    JUNK_DIRS = %w( .git )
     JUNK_FILES = %w( RCSLOG tags TAGS .make.state .nse_depinfo )
     HOOK_FILES = %w( pre-%s post-%s pre-%s.rb post-%s.rb ).map {|fmt|
       %w( config setup install clean ).map {|t| sprintf(fmt, t) }
@@ -253,17 +254,20 @@ module Gem2Deb
       files2 = []
       files.each do |f|
         fb = File::basename(f)
-        next if (JUNK_FILES + HOOK_FILES).include?(fb)
-        next if JUNK_PATTERNS.select { |pat| fb =~ pat } != []
-        # accept_pattern on this directory
-        if File.file?(File.join(dir, f)) &&
-          accept_pattern.is_a?(Regexp) && f.match(accept_pattern).nil?
-          next
+        fpath = File.join(dir, f)
+        next if File.directory?(fpath) && (JUNK_DIRS).include?(fb)
+        if File.file?(fpath)
+          next if JUNK_PATTERNS.select { |pat| fb =~ pat } != []
+          next if (JUNK_FILES + HOOK_FILES).include?(fb)
+          # accept_pattern on this directory
+          if accept_pattern.is_a?(Regexp) && f.match(accept_pattern).nil?
+            next
+          end
         end
         files2 << f
       end
       (files - files2). each do |f|
-        puts "WARNING: excluded file: #{f}"
+        puts "WARNING: excluded : #{f}"
       end
       files2
     end
